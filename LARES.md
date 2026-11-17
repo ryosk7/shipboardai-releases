@@ -26,7 +26,7 @@ This file is written for **Lares** (the Olares AI assistant) to install, update 
 |---|---|---|---|
 | `router` | Router | yes | AI gateway; Shipboard AI calls every model through it. Shipboard AI cannot install without it. |
 | `llamacppqwen3827bggufv3` | Qwen3.8-27B (llama.cpp) | yes | Chat model: answers, checks, report reviews, troubleshooting. Needs an NVIDIA GPU with about 23 GiB VRAM. |
-| `ollamallmbasev3` set to `qwen3-embedding:8b` | Ollama Engine Base (shows as "Qwen3 Embedding 8B") | yes (or EmbeddingGemma) | Embedding model for document search. Router lists it as `Olares/qwen3-embedding:8b`. |
+| `llamacppllmbasev3` cloned as "Qwen3 Embedding 8B (llama.cpp)" (section 4) | llama.cpp Engine Base, Qwen3 Embedding 8B Q4_K_M on the CPU | yes (or EmbeddingGemma) | Embedding model for document search. Router lists it as `Olares/Qwen/Qwen3-Embedding-8B-GGUF:Q4_K_M`. Runs on the CPU (about 1 s per question, ~6 GiB RAM) so questions never switch the GPU away from Qwen3.8. |
 | `embeddinggemmav3` | EmbeddingGemma | alternative | Lighter embedding model on the Intel iGPU; only if the user asks for it. One embedding model is enough. |
 | `bgererankerv2m3` | BGE-Reranker-v2-m3 | recommended | Reranks search results (Intel iGPU). |
 | `dotsocr` | dots.ocr | recommended | Reads scanned pages when documents are registered. |
@@ -50,8 +50,8 @@ curl -s https://api.github.com/repos/ryosk7/shipboardai-releases/releases/latest
 ```
 
 From the first output, read `state` and `version` of `router`, `llamacppqwen3827bggufv3`, the embedding model (a row
-whose `title` contains `Qwen3 Embedding`, whose `name` may be `ollamallmbasev3` or a variant such as
-`ollamallmbasev352cc1f`, or else `embeddinggemmav3`), `bgererankerv2m3`, `dotsocr`, `levv1` and `shipboardai`. From the
+whose `title` contains `Qwen3 Embedding (llama.cpp)`, whose `name` is a clone such as `llamacppllmbasev314c33e`, or
+else `embeddinggemmav3`; an older `ollamallmbasev3` row is no longer used and may stay stopped), `bgererankerv2m3`, `dotsocr`, `levv1` and `shipboardai`. From the
 second, read the latest version (`tag_name` without the leading `v`).
 
 Report a table like this, then propose the next section:
@@ -60,7 +60,7 @@ Report a table like this, then propose the next section:
 |---|---|---|---|
 | Router | 1.1.3 | running | ok |
 | Qwen3.8-27B | 1.0.21 | running | ok |
-| Qwen3 Embedding 8B | 1.3.18 | running | ok |
+| Qwen3 Embedding 8B (llama.cpp) | 1.2.40 | running | ok |
 | Shipboard AI | 0.4.15 (latest 0.4.15) | running | up to date |
 
 Decide:
@@ -79,9 +79,15 @@ Install only the required apps from section 1 that are missing, in this order: `
 ```sh
 olares-cli market install router --watch
 olares-cli market install llamacppqwen3827bggufv3 --compute-mode nvidia --watch --watch-timeout 1h
-olares-cli market install ollamallmbasev3 \
-  --env MODEL_SOURCE=ollama://qwen3-embedding:8b --env MODEL_NAME=qwen3-embedding:8b --env MODEL_MODE=embedding \
+olares-cli market clone llamacppllmbasev3 --title "Qwen3 Embedding 8B (llama.cpp)" --compute-mode nvidia \
+  --env "MODEL_SOURCE=hf://Qwen/Qwen3-Embedding-8B-GGUF --include Qwen3-Embedding-8B-Q4_K_M.gguf" \
+  --env "MODEL_NAME=Qwen/Qwen3-Embedding-8B-GGUF:Q4_K_M" \
+  --env MODEL_MODE=embedding --env MODEL_SUPPORTS=none \
+  --env "ENGINE_ARGS=-c 2048 -ub 2048 -b 2048 --pooling last -ngl 0 -dev none" \
   --watch --watch-timeout 1h
+# The engine flags live on the model card, which wins over ENGINE_ARGS after the first start; set them there too:
+olares-cli router model spec edit 'Olares/Qwen/Qwen3-Embedding-8B-GGUF:Q4_K_M' \
+  --engine-args "-c 2048 -ub 2048 -b 2048 --pooling last -ngl 0 -dev none" --yes
 ```
 
 - The Qwen model downloads tens of GB; a long wait is normal.
